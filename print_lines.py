@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""Colorize the current line in the preview window in bold red."""
 
 import os
+import os.path as path
 import shutil
 import sys
 
@@ -21,8 +23,8 @@ RED = "\033[1;31m"
 RESET = "\033[0;0m"
 BOLD = "\033[;1m"
 
-if __name__ == '__main__':
-    with open(file) as f:
+if __name__ == "__main__":
+    with open(path.normpath(file)) as f:
         for linenum, line_content in enumerate(f, start=1):
             if beginning <= linenum <= end:
                 if linenum == line:

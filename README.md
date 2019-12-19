@@ -5,20 +5,24 @@ tartar of convention that handicaps its retrieval.***
 
 --- [Notational Velocity home page](http://notational.net/)
 
+Notational Velocity is a note-taking app where searching for a note and
+creating one are the same operation.
+
+You search for a query, and if no note matches, it creates a new note
+with that query as the title.
+
 ## Usage
 
 See the following GIF or watch this
-[asciinema](https://asciinema.org/a/87077gwwldpnjtvzd5drsdw39):
+[asciinema](https://asciinema.org/a/oXAsE6lDnywkrSSH5xuOIVQuO):
 
 ![Usage](/screenshots/usage.gif?raw=true "Usage")
-
-![Usage](/screenshots/lazy-eval.png?raw=true "Usage")
 
 ## Installation
 
 ``` {.vim}
 " with vim-plug
-Plug 'https://github.com/Alok/notational-fzf-vim'
+Plug 'https://github.com/alok/notational-fzf-vim'
 ```
 
 ## Changes
@@ -74,15 +78,13 @@ You can define relative links, so adding `./docs` and `./notes` will
 work. Keep in mind that it's relative to your current working directory
 (as Vim interprets it).
 
-This plugin may not work on Windows. I only have a Mac to test it on. It
-works for sure on Mac with Neovim, and *should* work in terminal Vim,
-since it's just a wrapper over `fzf`.
-
 ## Dependencies
 
 -   [`rg`](https://github.com/BurntSushi/ripgrep) is required for its
     fast search.
+
 -   [`fzf`](https://github.com/junegunn/fzf).
+
 -   `fzf` Vim plugin. Install the Vim plugin that comes with `fzf`,
     which can be done like so if you use
     [vim-plug](https://github.com/junegunn/vim-plug).
@@ -117,7 +119,8 @@ command `:NV`, which can take 0 or more arguments, which are interpreted
 as regexes.
 
 Type `:NV` or bind it to a mapping to bring up a fuzzy search menu. Type
-in your search terms and it will fuzzy search for them.
+in your search terms and it will fuzzy search for them. Adding an
+exclamation mark to the command (`:NV!`), will run it fullscreen.
 
 You can type `:NV` to see all results, and then filter them with FZF.
 You can type `:NV python` to restrict your initial search to lines that
@@ -126,7 +129,7 @@ separated by a space. You know, regexes.
 
 It does not search in a fully fuzzy fashion because that's less useful
 for prose. It looks for full words, but they don't have to be next to
-each other, just in the right order. You can use the arrow keys or `c-p`
+each other, just on the same line. You can use the arrow keys or `c-p`
 and `c-n` to scroll through the search results, and then hit one of
 these keys to open up a file:
 
@@ -136,6 +139,7 @@ Note that the following options can be customized.
 -   `c-v`: Open in vertical split
 -   `c-s`: Open in horizontal split
 -   `c-t`: Open in new tab
+-   `c-y`: Yank the selected filenames
 -   `<Enter>`: Open highlighted search result in current buffer
 
 The lines around the selected file will be visible in a preview window.
@@ -154,11 +158,11 @@ nnoremap <silent> <c-s> :NV<CR>
 
 ## Optional Settings and Their Defaults
 
-You can shorten pathnames by setting `g:nv_use_short_pathnames = 1`.
+You can display the full path by setting `g:nv_use_short_pathnames = 0`.
 
 You can toggle displaying the preview window by pressing `alt-p`. This
-is handy on smaller screens. If yourself don't want to show the preview
-by default, set `g:nv_show_preview = 0`.
+is handy on smaller screens. If you don't want to show the preview by
+default, set `g:nv_show_preview = 0`.
 
 ``` {.vim}
 " String. Set to '' (the empty string) if you don't want an extension appended by default.
@@ -186,8 +190,24 @@ let g:nv_create_note_window = 'vertical split'
 " Boolean. Show preview. Set by default. Pressing Alt-p in FZF will toggle this for the current search.
 let g:nv_show_preview = 1
 
+" Boolean. Respect .*ignore files in or above nv_search_paths. Set by default.
+let g:nv_use_ignore_files = 1
+
+" Boolean. Include hidden files and folders in search. Disabled by default.
+let g:nv_include_hidden = 0
+
 " Boolean. Wrap text in preview window.
 let g:nv_wrap_preview_text = 1
+
+" String. Width of window as a percentage of screen's width.
+let g:nv_window_width = '40%'
+
+" String. Determines where the window is. Valid options are: 'right', 'left', 'up', 'down'.
+let g:nv_window_direction = 'down'
+
+" String. Command to open the window (e.g. `vertical` `aboveleft` `30new` `call my_function()`).
+let g:nv_window_command = 'down'
+let g:nv_window_command = 'call my_function()'
 
 " Float. Width of preview window as a percentage of screen's width. 50% by default.
 let g:nv_preview_width = 50
@@ -195,9 +215,15 @@ let g:nv_preview_width = 50
 " String. Determines where the preview window is. Valid options are: 'right', 'left', 'up', 'down'.
 let g:nv_preview_direction = 'right'
 
+" String. Yanks the selected filenames to the default register.
+let g:nv_yank_key = 'ctrl-y'
+
+" String. Separator used between yanked filenames.
+let g:nv_yank_separator = "\n"
+
 " Boolean. If set, will truncate each path element to a single character. If
-" you have colons in your pathname, this will fail. Not set by default.
-let g:nv_use_short_pathnames = 0
+" you have colons in your pathname, this will fail. Set by default.
+let g:nv_use_short_pathnames = 1
 
 "List of Strings. Shell glob patterns. Ignore all filenames that match any of
 " the patterns.
@@ -218,8 +244,8 @@ how this plugin handles input but like how it wraps everything else. It
 -   Add `~/notes` and `~/wiki` so your notes are only one key binding
     away.
 -   Add relative links like `./notes`, `./doc`, etc. to
-    `g:nv_search_paths` so you can always see/update the documentation of
-    your current project and keep up-to-date personal notes.
+    `g:nv_search_paths` so you can always see/update the documentation
+    of your current project and keep up-to-date personal notes.
 
 ## Philosophy
 
@@ -260,3 +286,7 @@ Is ***always*** welcome. If you have any ideas or issues, let me know
 and I'll try to address them. Not all will be implemented, but if they
 fit into the philosophy of this plugin or seem really useful, I'll do my
 best.
+
+## License
+
+Apache 2

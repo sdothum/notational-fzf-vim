@@ -1,15 +1,21 @@
 #!/usr/bin/env pypy3
 # encoding: utf-8
 
-import sys
-from os import pardir, sep
-from os.path import abspath, expanduser, join, split
+# Supposedly, importing so that you don't need dots in names speeds up a
+# script, and the point of this one is to run fast.
+
+import platform
+from os import pardir
+from os.path import abspath, expanduser, join, sep, split, splitdrive
 from pathlib import PurePath
+from sys import stdin
+
 
 # These are floated to the top so they aren't recalculated every loop.  The
 # most restrictive replacements should come earlier.
-REPLACEMENTS = ('', pardir, '~')
+REPLACEMENTS = ("", pardir, "~")
 old_paths = [abspath(expanduser(replacement)) for replacement in REPLACEMENTS]
+IS_WINDOWS = platform.system().lower() == "windows"
 
 
 def prettyprint_path(path: str, old_path: str, replacement: str) -> str:
@@ -21,7 +27,7 @@ def prettyprint_path(path: str, old_path: str, replacement: str) -> str:
 
 
 def shorten(path: str):
-    """returns 2 strings, the shortened parent directory and the filename"""
+    """Returns 2 strings, the shortened parent directory and the filename."""
     # We don't want to shorten the filename, just its parent directory, so we
     # `split()` and just shorten `path`.
     path, filename = split(path)
@@ -41,11 +47,11 @@ def shorten(path: str):
     return short_path, filename
 
 
-GREEN = '\033[32m'
-PURPLE = '\033[35m'  # looks pink to me
-CYAN = '\033[36m'
+GREEN = "\033[32m"
+PURPLE = "\033[35m"  # looks pink to me
+CYAN = "\033[36m"
 
-RESET = '\033[0m'
+RESET = "\033[0m"
 
 # RED = '\033[31m'
 # BLUE = '\033[34m'
@@ -61,38 +67,51 @@ def color(line, color):
 
 def process_line(line: str) -> str:
     # Expected format is colon separated `name:line number:contents`
-    filename, linenum, contents = line.split(sep=':', maxsplit=2)
+
+    if IS_WINDOWS:
+        # Windows paths may contain a colon, e.g. C:\Windows\ which messes up the split
+        # splitdrive(string) results in the following:
+        #   Windows drive letter, e.g. C:\Windows\Folder\Foo.txt -> ('C', '\Windows\Folder\Foo.txt')
+        #   Windows UNC path, e.g. \\Server\Share\Folder\Foo.txt -> ('\\Server\Share', '\Folder\Foo.txt')
+        #   *nix, e.g. /any/path/to/file.txt -> ('', '/any/path/to/file.txt')
+        _, line = splitdrive(line)  #  Toss the drive letter since it's not necessary.
+    filename, linenum, contents = line.split(sep=":", maxsplit=2)
 
     # Drop trailing newline.
     contents = contents.rstrip()
 
     # Normalize path for further processing.
-    filename = abspath(filename)
+    if not IS_WINDOWS:
+        # This prepends cwd in Windows which is unnecessary.
+        filename = abspath(filename)
 
     shortened_parent, basename = shorten(filename)
     # The conditional is to avoid a leading slash if the parent is replaced
     # with an empty directory. The slash is manually colored because otherwise
     # `os.path.join` won't do it.
     if shortened_parent:
-        colored_short_name = color(shortened_parent + '/', CYAN)
+        colored_short_name = color(shortened_parent + sep, PURPLE) + color(
+            basename, CYAN
+        )
     else:
-        colored_short_name = ''
-
-    colored_short_name += color(basename, PURPLE)
+        colored_short_name = color(basename, CYAN)
 
     # Format is: long form, line number, short form, line number, rest of line. This is so Vim can process it.
-    formatted_line = ':'.join([
-        color(filename, PURPLE),
-        color(linenum, GREEN),
-        colored_short_name,
-        color(linenum, GREEN),
-        contents,
-    ])
+    formatted_line = ":".join(
+        [
+            color(filename, CYAN),
+            color(linenum, GREEN),
+            colored_short_name,
+            color(linenum, GREEN),
+            contents,
+        ]
+    )
     return formatted_line
 
     # We print the long and short forms, and one form is picked in the Vim script that uses this.
     # print(formatted_line)
 
-if __name__ == '__main__':
-    for line in sys.stdin:
+
+if __name__ == "__main__":
+    for line in stdin:
         print(process_line(line))

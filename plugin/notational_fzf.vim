@@ -7,6 +7,13 @@ function! s:single_quote(str)
     return "'" . a:str . "'"
 endfunction
 
+"============================= Dependencies ================================
+
+if !executable('rg')
+    echoerr '`rg` is not installed. See https://github.com/BurntSushi/ripgrep for installation instructions.'
+    finish
+endif
+
 "============================== User settings ==============================
 
 
@@ -22,6 +29,10 @@ if !exists('g:nv_search_paths')
 
 endif
 
+let s:window_direction = get(g:, 'nv_window_direction', 'down')
+let s:window_width = get(g:, 'nv_window_width', '40%')
+let s:window_command = get(g:, 'nv_window_command', '')
+
 let s:ext = get(g:, 'nv_default_extension', '.md')
 
 " Valid options are ['up', 'down', 'right', 'left']. Default is 'right'. No colon for
@@ -33,11 +44,30 @@ let s:wrap_text = get(g:, 'nv_wrap_preview_text', 0) ? 'wrap' : ''
 " Show preview unless user set it to be hidden
 let s:show_preview = get(g:, 'nv_show_preview', 1) ? '' : 'hidden'
 
+" Respect .*ignore files unless user has chosen not to
+let s:use_ignore_files = get(g:, 'nv_use_ignore_files', 1) ? '' : '--no-ignore'
+
+" Skip hidden files and folders unless user chooses to include them
+let s:include_hidden = get(g:, 'nv_include_hidden', 0) ? '--hidden' : ''
+
 " How wide to make preview window. 72 characters is default.
 let s:preview_width = exists('g:nv_preview_width') ? string(float2nr(str2float(g:nv_preview_width) / 100.0 * &columns)) : ''
 
 " Expand all directories and escape metacharacters to avoid issues later.
 let s:search_paths = map(copy(g:nv_search_paths), 'expand(v:val)')
+
+" Separator for yanked files
+let s:yank_separator = get(g:, 'nv_yank_separator', "\n")
+
+"=========================== Windows Overrides ============================
+
+if has('win64') || has('win32')
+  let s:null_path = 'NUL'
+  let s:command = ''
+else
+  let s:null_path = '/dev/null'
+  let s:command = 'command'
+endif
 
 " The `exists()` check needs to be first in case the main directory is not
 " part of `g:nv_search_paths`.
@@ -54,7 +84,8 @@ else
     " this awkward bit of code is to get around the lack of a for-else
     " loop in vim
     if !exists('s:main_dir')
-        echoerr 'no directories found in `g:nv_search_paths`'
+        echomsg 'no directories found in `g:nv_search_paths`'
+        finish
     endif
 endif
 
@@ -63,6 +94,7 @@ let s:search_path_str = join(map(copy(s:search_paths), 'shellescape(v:val)'))
 "=========================== Keymap ========================================
 
 let s:create_note_key = get(g:, 'nv_create_note_key', 'ctrl-x')
+let s:yank_key = get(g:, 'nv_yank_key', 'ctrl-y')
 let s:create_note_window = get(g:, 'nv_create_note_window', 'vertical split ')
 
 let s:keymap = get(g:, 'nv_keymap',
@@ -76,18 +108,27 @@ let s:keymap = extend(s:keymap, {
             \ s:create_note_key : s:create_note_window,
             \ })
 
-" FZF expect comma sep str
-let s:expect_keys = join(keys(s:keymap) + get(g:, 'nv_expect_keys', []), ',')
+" FZF expects a comma separated string.
+let s:expect_keys = join(keys(s:keymap) + get(g:, 'nv_expect_keys', []) + [s:yank_key], ',')
+
+"================================ Yank string ==============================
+
+function! s:yank_to_register(data)
+  let @" = a:data
+  silent! let @* = a:data
+  silent! let @+ = a:data
+endfunction
 
 "================================ Short Pathnames ==========================
 
-let s:use_short_pathnames = get(g:, 'nv_use_short_pathnames', 0)
+let s:use_short_pathnames = get(g:, 'nv_use_short_pathnames', 1)
 
-" Can't be default since python3 is required for it to work
+" Python 3 is required for this to work
+let s:python_executable = executable('pypy3') ? 'pypy3' : 'python3'
+let s:highlight_path_expr = join([s:python_executable , '-S',expand('<sfile>:p:h:h') . '/print_lines.py' , '{2} {1} ', '2>' . s:null_path,])
+
 if s:use_short_pathnames
-    let s:python_executable = executable('pypy3') ? 'pypy3' : 'python3'
     let s:format_path_expr = join([' | ', s:python_executable, '-S', shellescape(expand('<sfile>:p:h:h') . '/shorten_path_for_notational_fzf.py'),])
-    let s:highlight_path_expr =join([s:python_executable  , '-S', expand('<sfile>:p:h:h') . '/print_lines.py' , '{2} {1} ', '2>/dev/null',])
     " After piping through the Python script, our format is
     " filename:linum:shortname:linenum:contents, so we start at index 3 to
     " avoid displaying the long pathname
@@ -131,6 +172,10 @@ function! s:handler(lines) abort
    " Handle creating note.
    if keypress ==? s:create_note_key
      let candidates = [fnameescape(s:main_dir  . '/' . query . s:ext)]
+   elseif keypress ==? s:yank_key
+     let pat = '\v(.{-}):\d+:'
+     let hashes = join(filter(map(copy(a:lines[2:]), 'matchlist(v:val, pat)[1]'), 'len(v:val)'), s:yank_separator)
+     return s:yank_to_register(hashes)
    else
        let filenames = a:lines[2:]
        let candidates = []
@@ -164,11 +209,14 @@ command! -nargs=* -bang NV
       \ call fzf#run(
           \ fzf#wrap({
               \ 'sink*': function(exists('*NV_note_handler') ? 'NV_note_handler' : '<sid>handler'),
+              \ 'window': s:window_command,
               \ 'source': join([
-                   \ 'command',
+                   \ s:command,
                    \ 'rg',
                    \ '--follow',
-                   \ '--hidden',
+                   \ s:use_ignore_files,
+                   \ '--smart-case',
+                   \ s:include_hidden,
                    \ '--line-number',
                    \ '--color never',
                    \ '--no-messages',
@@ -176,13 +224,13 @@ command! -nargs=* -bang NV
                    \ '--no-heading',
                    \ '--with-filename',
                    \ ((<q-args> is '') ?
-                     \ ' "\S" ' :
+                     \ '"\S"' :
                      \ shellescape(<q-args>)),
                    \ s:search_path_str,
                    \ s:format_path_expr,
-                   \ '2>/dev/null',
+                   \ '2>' . s:null_path,
                    \ ]),
-                   \
+              \ s:window_direction: s:window_width,
               \ 'options': join([
                                \ '--print-query',
                                \ '--ansi',
@@ -210,5 +258,6 @@ command! -nargs=* -bang NV
                                                                    \ ]),
                                                             \ 'v:val != "" ')
                                                        \ ,':')
-                               \ ])}))
+                               \ ])},<bang>0))
+
 
