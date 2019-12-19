@@ -5,7 +5,7 @@
 # script, and the point of this one is to run fast.
 
 import platform
-from os import pardir
+from os import pardir, environ
 from os.path import abspath, expanduser, join, sep, split, splitdrive
 from pathlib import PurePath
 from sys import stdin
@@ -48,8 +48,8 @@ def shorten(path: str):
 
 
 GREEN = "\033[32m"
-PURPLE = "\033[35m"  # looks pink to me
-CYAN = "\033[36m"
+PURPLE = open(environ['HOME'] + '/.session/vim:color:path').readlines()[0].rstrip('\n')  # duochrome theme override
+CYAN = open(environ['HOME'] + '/.session/vim:color:file').readlines()[0].rstrip('\n')
 
 RESET = "\033[0m"
 
